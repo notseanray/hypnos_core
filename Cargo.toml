@@ -1,0 +1,15 @@
+[package]
+name = "hypnos_core"
+version = "0.1.0"
+edition = "2021"
+authors = ["NotCreative21"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serenity = { version = "0.10.9", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "cache"] }
+serde = "1.0.117"
+serde_derive = "1.0.117"
+toml = "0.5.3"
+tokio = { version = "1", features = ["full"] }
+chrono = "0.4.0"

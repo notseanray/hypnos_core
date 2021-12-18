@@ -1,0 +1,6 @@
+# this file is used by the bot to detect if it can recompile without any
+problems
+initial release:
+- recompile command
+- chat bridge
+- command system layout
