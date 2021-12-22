@@ -16,14 +16,12 @@ use std::{
  * correctly, this would be very very nice as an update is as simply as a command in discord
  */
 pub async fn recompile(ctx: Context, msg: Message, ids: Vec<u64>, build_dir: String) {
-
     // generate default response to command, this will get changed as the compilation is
     // successful, if not will indicate the invalid perms
     let mut response: String = "invalid permissions".to_string();
 
     // check if the message author has correct permissions
     if ids.contains(msg.author.id.as_u64()) {
-
         // remove the first portion of the command
         let command: &str = &msg.content[10..];
 
@@ -93,9 +91,9 @@ pub async fn recompile(ctx: Context, msg: Message, ids: Vec<u64>, build_dir: Str
 
                 // print the new changes out to the terminal
                 println!("new change: {:#?}", line);
-                
+
                 // look for the keyword 'update', if it is found then we know that we should not
-                // compile without changes to the config file first 
+                // compile without changes to the config file first
                 if line.contains("*update") {
                     change = true;
                     response =
@@ -106,7 +104,6 @@ pub async fn recompile(ctx: Context, msg: Message, ids: Vec<u64>, build_dir: Str
 
         // if there is no change requiring reconfig, then we can procede with compiling
         if !change {
-
             // send the command to go the new code and compile it with cargo in release mode
             send_command(
                 "recompile".to_string(),
@@ -125,8 +122,10 @@ pub async fn recompile(ctx: Context, msg: Message, ids: Vec<u64>, build_dir: Str
             // if the resulting file has a timestamp that is greater than the old one (unix
             // timestamp format) then we know that something *might have* gone right, and we can
             // change the response and copy the new file into the folder
+            //
+            // TODO - check if this actually fucking works
             if metadata(result_bin.to_owned()).unwrap().modified().unwrap()
-                > metadata(old_bin.to_owned()).unwrap().modified().unwrap()
+                < metadata(old_bin.to_owned()).unwrap().modified().unwrap()
             {
                 response = "compilation successful".to_string();
 

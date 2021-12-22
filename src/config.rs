@@ -23,7 +23,8 @@ pub struct Config {
 #[derive(Deserialize)]
 pub struct Optional {
     pub chat_bridge_id: Option<u64>,
-    pub server_name: Option<String>,
+    pub server_name: Vec<String>,
+    pub generic_name: Vec<String>,
     pub backup_time: Option<i64>,
     pub backup_dir: Option<String>,
     pub backup_store: Option<String>,

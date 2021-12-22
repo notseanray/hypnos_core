@@ -4,3 +4,5 @@ initial release:
 - recompile command
 - chat bridge
 - command system layout
+- execute command
+- terraria log parsing for cross-game chat bridge capabilities

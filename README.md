@@ -9,10 +9,16 @@ hypnos core is an attempt to create a server managment tool in the form of a dis
 #### current features
 * self-recompiling (can recieve upstream updates and recompile itself)
 * chat bridge between discord <-> mc (will support multiple servers soon)
+* cross-game chat-bridge, due to the bot structure other games are supported
+* baked in multithreading, each thread has a different job that is kept in sync
+* execute mc commands, shell commands, etc, via discord
+
+#### currently under development
+* server monitor (display ram usage, disk usage, etc.)
+* backup manager
+* improving reliable recompiling
 
 #### future features
-* scheduled backup system
 * unscheduled backup managment (creative/deletion)
-* server monitor (display ram usage, disk usage, etc.)
 * discord auto mod/ban features
 * interlinked servers, the bot can communicate with other copies of itself on other servers

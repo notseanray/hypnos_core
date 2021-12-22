@@ -1,5 +1,6 @@
 use serenity::{model::channel::Message, prelude::*};
 
+// COMING SOON
 pub async fn backup(ctx: Context, msg: Message) {
     // Sending a message can fail, due to a network error, an
     // authentication error, or lack of permissions to post in the

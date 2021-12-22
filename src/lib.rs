@@ -7,6 +7,8 @@ use std::{
 
 use serenity::{model::id::ChannelId, prelude::*};
 
+use sysinfo::{Disk, DiskExt, ProcessExt, System, SystemExt};
+
 // not so useful help message to printout when accessed from the command line
 pub fn print_help() {
     let help_msg = format!(
@@ -56,6 +58,8 @@ fn replace_formatting(msg: String) -> String {
         .replace(&"§n", "")
         .replace(&"§o", "")
         .replace(&"§r", "")
+        .replace("[6n", "")
+        .replace(": <", "<")
 }
 
 // generate the tmux pipe connecting to the specified server, this also takes in the option to
@@ -191,19 +195,29 @@ pub async fn update_messages(
                 // parse where the actual command starts, without the username
                 let cmd_start: usize = line_sep.find(&ign_command).unwrap() + 5;
 
+                if line_sep.len() < cmd_start {
+                    return cur_line;
+                }
+
                 // parse the actual command with argument
                 let cmd: &str = &line_sep[cmd_start..];
 
                 // parse where the just the command ends and where the argument is
-                let cmd_split: usize = cmd.find(" ").unwrap();
+                let cmd_split: Option<usize> = cmd.find(" ");
+
+                if cmd_split.is_none() {
+                    return cur_line;
+                }
 
                 // if it's in the whitelist send the command and argument separately to handle
                 // command, there it will be transformed to the correct in game equivalent
-                if allowed_commands.contains(&cmd[1..cmd_split].to_owned()) {
+                if allowed_commands.contains(
+                    &cmd[1..cmd_split.expect("no command to split out of message")].to_owned(),
+                ) {
                     handle_command(
                         server_name.to_owned(),
-                        cmd[1..cmd_split].to_owned(),
-                        cmd[(cmd_split + 1)..].to_owned(),
+                        cmd[1..cmd_split.unwrap()].to_owned(),
+                        cmd[(cmd_split.unwrap() + 1)..].to_owned(),
                     )
                     .await;
                 }
@@ -217,7 +231,7 @@ pub async fn update_messages(
             // firstly we put the server name then the new line message, this is where replace
             // formatting comes in to remove the special mc escape sequences
             let message = format!(
-                "`[{}]{}`",
+                "[{}]{}",
                 &server_name,
                 &replace_formatting(line[33..].to_string())
             );
@@ -241,4 +255,145 @@ pub async fn update_messages(
 
     // return new line count to update the one in the main file
     cur_line
+}
+
+pub async fn update_messages_generic(
+    server_name: String,
+    lines: usize,
+    ctx: Context,
+    chat_id: u64,
+    ll: String,
+) -> (usize, String) {
+    let file_path: String = format!("/tmp/{}-HypnosCore", &server_name);
+
+    // open the log file in bufreader
+    let file = File::open(&file_path).unwrap();
+    let reader = BufReader::new(file);
+
+    let mut cur_line: usize = lines;
+
+    let mut new_line: String = String::new();
+
+    // Read the file line by line using the lines() iterator from std::io::BufRead.
+    for (i, line) in reader.lines().enumerate() {
+        let line = line.unwrap();
+
+        // skip lines that are irrelevant
+        if i >= cur_line {
+            // if they are new, update the counter
+            cur_line = i;
+
+            new_line = line.to_owned();
+
+            // this needs a lot of checks to ignore because terraria is FUCKING AIDS
+            if line.contains("<Server>")
+                || line.contains("Saving world")
+                || line.starts_with("Validating")
+                || line.starts_with("Backing")
+                || line.contains(" is connecting...")
+                || line.contains(" was booted: ")
+                || line.len() < 8
+                || &line == &ll
+            {
+                continue;
+            }
+
+            let reply: &str = &replace_formatting(line.to_string());
+
+            // if it's not an in game command, we can generate what the discord message will be
+            //
+            // firstly we put the server name then the new line message, this is where replace
+            // formatting comes in to remove the special mc escape sequences
+            let message = format!("[{}]{}", &server_name, reply);
+
+            if message.contains("say `") || message.contains("say [") {
+                continue;
+            }
+
+            // send the message to the chat bridge channel
+            if let Err(why) = ChannelId(chat_id).say(&ctx.http, message).await {
+                println!("Error sending message: {:?}", why);
+            }
+        }
+    }
+
+    // if the lines are under 2k, we don't need to replace the file since it doesn't take much time
+    // to process in the first place
+    if lines < 2000 {
+        return (cur_line, new_line);
+    }
+
+    // if it is above 2k however, we can reset the pipe and notify the to the console
+    gen_pipe(server_name, true).await;
+    println!("*info: pipe file reset");
+
+    // return new line count to update the one in the main file
+    (cur_line, new_line)
+}
+
+pub fn collect(server: String, lines: u16) -> String {
+    return " ".to_string();
+}
+
+pub async fn sys_check(dis: bool, ctx: Context, chat_id: u64) {
+    let sys: System = System::new_all();
+    let mut result: Vec<u64> = Vec::new();
+    if !dis {
+        // future, if first element < 100, it is the index of the disk that has problems
+        let (u, t, i) = check_disk(sys);
+        if i > -1 {
+            result.push(i as u64);
+        } else {
+            result.push(u);
+        }
+        result.push(t);
+
+        // send the message to the chat bridge channel
+        if let Err(why) = ChannelId(chat_id).say(&ctx.http, "warn!").await {
+            println!("Error sending message: {:?}", why);
+        }
+    }
+    if let Err(why) = ChannelId(chat_id).say(&ctx.http, "test").await {
+        println!("Error sending message: {:?}", why);
+    }
+}
+
+fn check_disk(sys: System) -> (u64, u64, i32) {
+    let (mut used_biggest, mut used_total) = (0, 0);
+    let (mut warn_i, mut cur_i) = (0, 0);
+    let mut warn: bool = false;
+    for disk in sys.disks() {
+        // check if the disk space is over 10 gig total, if it is smaller it could be a ramfs or
+        // temp partition that we can ignore
+        if disk.total_space() < 10737418240 {
+            continue;
+        }
+
+        if disk.total_space() > used_total {
+            used_total = disk.total_space();
+            used_biggest = disk.available_space();
+        }
+
+        if (disk.available_space() as f64 / disk.total_space() as f64) < 0.3 {
+            warn = true;
+            warn_i = cur_i;
+            println!("*warn: drive space low on drive index: {}", warn_i);
+        }
+
+        cur_i += 1;
+    }
+    if warn {
+        return (used_biggest, used_total, warn_i);
+    } else {
+        return (used_biggest, used_total, -1);
+    }
+}
+
+fn load_avg(sys: System) -> (u64) {
+   
+    return 0;
+}
+
+fn run_calc(expression: String) {
+
 }
