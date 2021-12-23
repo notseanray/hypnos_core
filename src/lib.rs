@@ -5,9 +5,20 @@ use std::{
     process::Command,
 };
 
-use serenity::{model::id::ChannelId, prelude::*};
+use serenity::{
+    model::id::ChannelId, 
+    prelude::*
+};
 
-use sysinfo::{Disk, DiskExt, ProcessExt, System, SystemExt};
+use sysinfo::{
+    Disk, 
+    DiskExt, 
+    ProcessExt, 
+    System, 
+    SystemExt
+};
+
+use eval::eval;
 
 // not so useful help message to printout when accessed from the command line
 pub fn print_help() {
@@ -33,7 +44,7 @@ pub fn print_help() {
 //
 // plus I trust llvm to make my code less bad
 //
-// This removes all the formmating codes coming from MC chat
+// This removes all the formmating codes coming from MC chat and terraria
 fn replace_formatting(msg: String) -> String {
     msg.replace(&"§0", "")
         .replace(&"§1", "")
@@ -250,13 +261,22 @@ pub async fn update_messages(
     }
 
     // if it is above 2k however, we can reset the pipe and notify the to the console
-    gen_pipe(server_name, true).await;
-    println!("*info: pipe file reset");
+    gen_pipe(server_name.to_owned(), true).await;
+    println!("*info: pipe file reset -> {}", server_name);
 
     // return new line count to update the one in the main file
     cur_line
 }
 
+// similar to the function above, this checks for new messages that are not minecraft
+// currently it only supports checking terraria servers due to the method of parsing, but that can
+// be easily adjusted to work for any game or even normal processes
+//
+// terraria has a very wonky logging format, not everything that is logged goes to a new line, if
+// the previous message was a command it changes format and if the previous was a message it
+// changes the format back
+//
+// this inconsistency leads to the parsing pattern being highly inefficient
 pub async fn update_messages_generic(
     server_name: String,
     lines: usize,
@@ -278,20 +298,25 @@ pub async fn update_messages_generic(
     for (i, line) in reader.lines().enumerate() {
         let line = line.unwrap();
 
-        // skip lines that are irrelevant
+        // due to how the terraria log operates, it must keep a log of the last line and if the
+        // current last line is the same do not send it, if it is different update the last line
+        // and send it to discord
         if i >= cur_line {
             // if they are new, update the counter
             cur_line = i;
 
             new_line = line.to_owned();
 
-            // this needs a lot of checks to ignore because terraria is FUCKING AIDS
+            // these checks are very messy but very neccessary, the logging format of terraria is
+            // highly inconsistent and this is one of the few ways to get it working
             if line.contains("<Server>")
                 || line.contains("Saving world")
                 || line.starts_with("Validating")
                 || line.starts_with("Backing")
                 || line.contains(" is connecting...")
                 || line.contains(" was booted: ")
+                || line.contains("[6nsay")
+                || line.contains("say ->")
                 || line.len() < 8
                 || &line == &ll
             {
@@ -324,8 +349,8 @@ pub async fn update_messages_generic(
     }
 
     // if it is above 2k however, we can reset the pipe and notify the to the console
-    gen_pipe(server_name, true).await;
-    println!("*info: pipe file reset");
+    gen_pipe(server_name.to_owned(), true).await;
+    println!("*info: pipe file reset -> {}", server_name);
 
     // return new line count to update the one in the main file
     (cur_line, new_line)
@@ -394,6 +419,21 @@ fn load_avg(sys: System) -> (u64) {
     return 0;
 }
 
-fn run_calc(expression: String) {
-
+// evaluate strings as an expression, this does NOT allow rce or anything, it can do very basic
+// math, it always sends the response to the chat bridge
+pub async fn run_calc(ctx: Context, chat_id: u64, expression: String) {
+    let result = eval(&expression);
+    let mut response: String = "".to_string(); 
+    if result.is_err() {
+        response = "invalid expression".to_string();
+    }
+    else {
+        if result.as_ref().ok().unwrap().to_string().len() > 200 {
+            return;
+        }
+        response = format!("-> {}", &result.ok().unwrap());
+    } 
+    if let Err(why) = ChannelId(chat_id).say(&ctx.http, response).await {
+        println!("Error sending message: {:?}", why);
+    }
 }

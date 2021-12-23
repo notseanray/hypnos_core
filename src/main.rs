@@ -125,6 +125,20 @@ impl EventHandler for Handler {
             }
         }
 
+        if &msg.content.len() > &2 && &msg.content[0..1] == "=" && !&msg.content.contains("..") { 
+            run_calc(ctx.to_owned(), self.chat_bridge_id, msg.content[1..].to_string()).await; 
+        }
+        if msg.content.starts_with("[") && msg.content.contains("> =") && !&msg.content.contains("..") {
+            let start: Option<usize> = msg.content.find("> =");
+            if start != None {
+                if (start.unwrap() + 2) < msg.content.len() {
+                    let spliced: &str = &msg.content[(start.unwrap() + 2)..];
+                    run_calc(ctx.to_owned(), self.chat_bridge_id, spliced.to_string()).await; 
+                }
+            }
+        }
+
+
         // if we know that the message is not from chat bridge we can still check to see if it has
         // the bot prefix, if it doesn't then we can just skip it
         if &msg.content.len() < &2 || &msg.content[0..1] != &self.prefix {
