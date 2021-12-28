@@ -1,12 +1,11 @@
-use hypnos_core::send_command;
-use serenity::{model::channel::Message, prelude::*};
+use crate::*;
+use serenity::model::channel::Message;
 
 pub async fn execute(ctx: Context, msg: Message, ids: Vec<u64>) {
     let mut response: String = "invalid permissions".to_string();
 
     // check if the user is aurthorized
     if ids.contains(msg.author.id.as_u64()) {
-
         // determine the contents of the command
         let mut cmd_contents: Vec<&str> = msg.content.split(" ").collect();
 

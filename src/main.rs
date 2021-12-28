@@ -5,23 +5,16 @@ use std::{
     time::{Duration, Instant},
 };
 
-mod commands;
 mod config;
-use crate::commands::*;
 use hypnos_core::*;
-
-// this is my janky command system, each command is it's own function in the commands module
-use execute::execute;
-use help::help;
-use invalid::invalid;
-use ping::ping;
-use recompile::recompile;
 
 use serenity::{
     async_trait,
     model::{channel::Message, gateway::Ready, id::GuildId},
     prelude::*,
 };
+
+use commands::*;
 
 /*
  * These variables are mostly used for data that must be accessed over various locations, they
@@ -54,94 +47,105 @@ impl EventHandler for Handler {
     // Event handlers are dispatched through a threadpool, and so multiple
     // events can be dispatched simultaneously.
     async fn message(&self, ctx: Context, msg: Message) {
+
         // if chat bridge is defined in the config, check if the message is in the chat bridge
         // channel, if it starts with the the server we are currently operating on then skip it
-        for i in self.server_name.clone() {
-            let server_name_format: String = format!("[{}]", i.to_owned());
-            if msg.channel_id == self.chat_bridge_id
-                && !msg.content.starts_with(&server_name_format)
-            {
-                let mut message = String::new();
-                let mut self_msg: bool = false;
-                unsafe {
-                    if msg.author.id == SELF_ID {
-                        self_msg = true;
+        if msg.channel_id == self.chat_bridge_id {
+            for i in self.server_name.clone() {
+                let server_name_format: String = format!("[{}]", i.to_owned());
+                
+                if !msg.content.starts_with(&server_name_format) {
+                    let mut message = String::new();
+                    let mut self_msg: bool = false;
+                    unsafe {
+                        if msg.author.id == SELF_ID {
+                            self_msg = true;
+                            // generate the tellraw command
+                            message = format!(
+                                "tellraw @a {{ \"text\": \"{}\" }}",
+                                &msg.content
+                                    .replace(|c: char| !c.is_ascii(), "")
+                                    .replace("\n", "")
+                            );
+                        }
+                    }
+                    if !self_msg {
                         // generate the tellraw command
                         message = format!(
-                            "tellraw @a {{ \"text\": \"{}\" }}",
-                            &msg.content.replace("\n", "")
+                            "tellraw @a {{ \"text\": \"[{}] {}\" }}",
+                            msg.author.name,
+                            msg.content
+                                .replace(|c: char| !c.is_ascii(), "")
+                                .replace("\n", "")
                         );
                     }
+                    // send it to the correct tmux session
+                    send_command(i.to_owned(), message).await;
                 }
-                if !self_msg {
-                    // generate the tellraw command
-                    message = format!(
-                        "tellraw @a {{ \"text\": \"[{}] {}\" }}",
-                        msg.author.name,
-                        msg.content.replace("\n", "")
-                    );
-                }
-                // send it to the correct tmux session
-                send_command(i.to_owned(), message).await;
             }
-        }
-        for i in self.generic_name.clone() {
-            let server_name_format: String = format!("[{}]", i.to_owned());
-            if msg.channel_id == self.chat_bridge_id
-                && !msg.content.starts_with(&server_name_format)
-            {
+            for i in self.generic_name.clone() {
+                let server_name_format: String = format!("[{}]", i.to_owned());
+                if !msg.content.starts_with(&server_name_format)
+                {
+                    let mut message = String::new();
 
-                let mut message = String::new();
+                    let mut self_msg: bool = false;
 
-                let mut self_msg: bool = false;
+                    // check if the author is itself, then we can shorten what is said in chat
+                    unsafe {
+                        if msg.author.id == SELF_ID {
+                            self_msg = true;
 
-                // check if the author is itself, then we can shorten what is said in chat
-                unsafe {
-                    if msg.author.id == SELF_ID {
+                            // terraria command format to paste in chat
+                            message = format!(
+                                "say {}", 
+                                &msg.content
+                            );
+                        }
+                    }
 
-                        self_msg = true;
-
-                        // terraria command format to paste in chat
+                    if !self_msg {
+                        // generate the tellraw command
                         message = format!(
-                            "say {}", 
-                            &msg.content.replace("\n", "")
+                            "say [{}] {}",
+                            msg.author.name,
+                            msg.content
                         );
-
                     }
+
+                    // send it to the correct tmux session
+                    send_command(i.to_owned(), message).await;
                 }
-
-                if !self_msg {
-
-                    // generate the tellraw command
-                    message = format!(
-                        "say [{}] {}",
-                        msg.author.name,
-                        msg.content.replace("\n", "")
-                    );
-                }
-
-                // send it to the correct tmux session
-                send_command(i.to_owned(), message).await;
             }
         }
 
-        if &msg.content.len() > &2 && &msg.content[0..1] == "=" && !&msg.content.contains("..") { 
-            run_calc(ctx.to_owned(), self.chat_bridge_id, msg.content[1..].to_string()).await; 
+        if &msg.content.len() > &2
+            && &msg.content[0..1] == "="
+            && msg.channel_id == self.chat_bridge_id
+        {
+            run_calc(
+                ctx.to_owned(),
+                self.chat_bridge_id,
+                msg.content[1..].to_string(),
+            )
+            .await;
         }
-        if msg.content.starts_with("[") && msg.content.contains("> =") && !&msg.content.contains("..") {
-            let start: Option<usize> = msg.content.find("> =");
+        if msg.content.replace(|c: char| !c.is_ascii(), "").starts_with("[")
+            && msg.content.contains("> =")
+            && msg.channel_id == self.chat_bridge_id
+        {
+            let start: Option<usize> = msg.content.replace(|c: char| !c.is_ascii(), "").find("> =");
             if start != None {
                 if (start.unwrap() + 2) < msg.content.len() {
-                    let spliced: &str = &msg.content[(start.unwrap() + 2)..];
-                    run_calc(ctx.to_owned(), self.chat_bridge_id, spliced.to_string()).await; 
+                    let spliced: &str = &msg.content[(start.unwrap() + 2)..].replace(|c: char| !c.is_ascii(), "");
+                    run_calc(ctx.to_owned(), self.chat_bridge_id, spliced.to_string()).await;
                 }
             }
         }
-
 
         // if we know that the message is not from chat bridge we can still check to see if it has
         // the bot prefix, if it doesn't then we can just skip it
-        if &msg.content.len() < &2 || &msg.content[0..1] != &self.prefix {
+        if &msg.content.len() < &2 || &msg.content[0..1].replace(|c: char| !c.is_ascii(), "") != &self.prefix {
             return;
         }
 
@@ -150,22 +154,26 @@ impl EventHandler for Handler {
         // commands
         //
         // plus I don't know how to use serenity properly
-        match &msg.content[1..] {
-            "ping" => ping(ctx, msg).await,
-            "help" => help(ctx, msg).await,
+        let cmd = &msg.content[1..].replace(|c: char| !c.is_ascii(), "");
+        match cmd.as_str() {
+            "ping" => ping::ping(ctx, msg).await,
+            "help" => help::help(ctx, msg).await,
             "recompile" => {
-                recompile(
+                recompile::recompile(
                     ctx,
                     msg,
                     self.shell_access.clone(),
                     self.build_dir.to_owned(),
                 )
                 .await
-            }
+            },
             "execute" => {
-                execute(ctx, msg, self.shell_access.clone()).await;
-            }
-            _ => invalid(ctx, msg).await,
+                execute::execute(ctx, msg, self.shell_access.clone()).await;
+            },
+            "syscheck" => {
+                syscheck::syscheck(ctx, msg, self.chat_bridge_id).await;
+            },
+            _ => invalid::invalid(ctx, msg).await,
         }
     }
 
@@ -184,6 +192,8 @@ impl EventHandler for Handler {
         println!("cache built successfully, starting process loops");
 
         let chat_id = self.chat_bridge_id;
+
+        let msg_ctx = ctx.clone();
 
         // this atomic boolean ensures that only one of each loop runs and that they run in order
         // correctly
@@ -239,11 +249,14 @@ impl EventHandler for Handler {
                 });
             }
 
-            // perform checks on the server every 15 minutes, this makes sure backups don't take up
-            // too much room, prevents the cpu from getting pinned at 100%, and more
+            // perform checks on the server every 5 minutes, this makes sure backups don't take up
+            // too much room, prevents the cpu from getting pinned at 100%, and ram usage from being too high
             tokio::spawn(async move {
                 loop {
-                    tokio::time::sleep(Duration::from_secs(900)).await;
+                    sys_check(false, msg_ctx.to_owned(), None, chat_id).await;
+                    // clear any zombies generated in the meantime
+                    reap();
+                    tokio::time::sleep(Duration::from_secs(300)).await;
                 }
             });
             // map thread
@@ -267,10 +280,11 @@ async fn main() {
     // set the default config path
     let mut config_path: String = "./hypnos_core.conf".to_string();
 
+    // TODO - add loading default config
     // if there are no env args, skip it, otherwise check them for certain conditions
     if envargs.len() > 1 {
         match envargs[1].as_str() {
-            "reset-cfg" => println!("coming soon"),
+            "reset-cfg" => default_cfg(true),
             "c" => config_path = envargs[2].to_owned(),
             "help" => print_help(),
             _ => println!("*warn: invalid argument"),

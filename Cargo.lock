@@ -446,6 +446,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "eval",
+ "libc",
  "serde",
  "serde_derive",
  "serenity",

@@ -39,9 +39,7 @@ pub fn load_config(conf: String) -> Config {
     // check if the config exists, and warn if it's not absolute
     //
     // default path is non absolute, so ignore that warning if you don't care
-    if !check_dir(conf.to_owned()) {
-        eprintln!("*error: config file does not exist!\n*fatal: exiting");
-    }
+    let _ = !check_dir(conf.to_owned(), true); 
 
     /*
      * TODO
@@ -55,7 +53,7 @@ pub fn load_config(conf: String) -> Config {
 
     // check if the build directory exists, this is where we expect the bot to rebuild itself if
     // needed
-    if !check_dir(core_config.build_dir.to_owned()) {
+    if !check_dir(core_config.build_dir.to_owned(), false) {
         eprintln!("*error: invalid build dir");
     }
 
@@ -70,7 +68,7 @@ pub fn load_config(conf: String) -> Config {
     // if the backup directory is defined but does not exists on the system, then trigger an error
     // and exit
     if core_config.optional.backup_dir != None
-        && !check_dir(core_config.optional.backup_dir.to_owned().unwrap())
+        && !check_dir(core_config.optional.backup_dir.to_owned().unwrap(), false)
     {
         eprintln!("*error: backup directory does not exist\n*fatal: exiting");
         std::process::exit(1);
@@ -78,7 +76,7 @@ pub fn load_config(conf: String) -> Config {
 
     // same as the backup directory for the directory backups are sent to
     if core_config.optional.backup_store != None
-        && !check_dir(core_config.optional.backup_store.to_owned().unwrap())
+        && !check_dir(core_config.optional.backup_store.to_owned().unwrap(), false)
     {
         eprintln!("*error: backup store directory does not exist\n*fatal: exiting");
         std::process::exit(1);

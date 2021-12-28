@@ -1,5 +1,5 @@
-use hypnos_core::*;
-use serenity::{model::channel::Message, prelude::*};
+use crate::*;
+use serenity::model::channel::Message;
 use std::{
     fs::{create_dir, metadata, remove_file, File},
     io::{BufRead, BufReader},
@@ -22,11 +22,6 @@ pub async fn recompile(ctx: Context, msg: Message, ids: Vec<u64>, build_dir: Str
 
     // check if the message author has correct permissions
     if ids.contains(msg.author.id.as_u64()) {
-        // remove the first portion of the command
-        let command: &str = &msg.content[10..];
-
-        // check different options avaible
-        let options: Vec<&str> = command.split(" ").collect();
 
         // create new tmux session to compile in with the name recompile
         Command::new("tmux")
@@ -54,9 +49,10 @@ pub async fn recompile(ctx: Context, msg: Message, ids: Vec<u64>, build_dir: Str
         // it
         //
         // next, copy the files into the backup directory
-        if options.contains(&"backup") {
+        if msg.content.contains(&"backup") {
             let old_build: String = format!("{}/old_src", build_dir);
-            if !check_dir(old_build.to_owned()) {
+            if !check_dir(old_build.to_owned(), false) {
+                println!("creating backup directory");
                 create_dir(old_build.to_owned())
                     .expect("*error: failed to create backup folder for old source");
             }
@@ -68,7 +64,7 @@ pub async fn recompile(ctx: Context, msg: Message, ids: Vec<u64>, build_dir: Str
         // if git is one of the options, then clone the main repo
         // TODO
         // add separate repo as optional config option
-        if options.contains(&"git") {
+        if msg.content.contains(&"git") {
             Command::new("git")
                 .args(["clone", "https://github.com/NotCreative21/hypnos_core.git"])
                 .output()
@@ -147,4 +143,5 @@ pub async fn recompile(ctx: Context, msg: Message, ids: Vec<u64>, build_dir: Str
     if let Err(why) = msg.channel_id.say(&ctx.http, response).await {
         println!("Error sending message: {:?}", why);
     }
+    reap();
 }
