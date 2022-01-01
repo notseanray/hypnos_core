@@ -27,6 +27,7 @@ pub struct Optional {
     pub generic_name: Vec<String>,
     pub backup_time: Option<i64>,
     pub backup_dir: Option<String>,
+    pub keep_time: Option<u64>,
     pub backup_store: Option<String>,
     pub ign_prefix: Option<String>,
 }

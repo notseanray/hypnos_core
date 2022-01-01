@@ -87,6 +87,7 @@ fn replace_formatting(msg: String) -> String {
         .replace(&"§o", "")
         .replace(&"§r", "")
         .replace("[6n", "")
+        .replace("[39;49m", "")
         .replace(": <", "<")
         .replace("]: ", "")
         .replace(|c: char| !c.is_ascii(), "")
@@ -135,8 +136,6 @@ pub async fn send_command(server_name: String, message: String) {
             "-t",
             &server_name,
             &message
-                .replace("\n", "")
-                .replace("\\", "")
                 .replace(|c: char| !c.is_ascii(), ""),
             "Enter",
         ])
@@ -203,6 +202,7 @@ pub async fn update_messages(
     // open the log file in bufreader
     let file = File::open(&file_path).unwrap();
     let reader = BufReader::new(file);
+    let mut message = "".to_string();
 
     let mut cur_line: usize = lines;
 
@@ -268,20 +268,30 @@ pub async fn update_messages(
                 return cur_line;
             }
 
+            let newline = &line[33..];
+
+            if newline.len() < 1 {
+                continue;
+            }
+
             // if it's not an in game command, we can generate what the discord message will be
             //
             // firstly we put the server name then the new line message, this is where replace
             // formatting comes in to remove the special mc escape sequences
-            let message = format!(
-                "[{}]{}",
+            let nmessage = format!(
+                "[{}]{}\n",
                 &server_name,
-                &replace_formatting(line[33..].to_string())
+                &replace_formatting(newline.to_string())
             );
 
-            // send the message to the chat bridge channel
-            if let Err(why) = ChannelId(chat_id).say(&ctx.http, message).await {
-                println!("Error sending message: {:?}", why);
-            }
+            message.push_str(&nmessage);
+       }
+    }
+
+    if message.len() > 0 {
+        // send the message to the chat bridge channel
+        if let Err(why) = ChannelId(chat_id).say(&ctx.http, message).await {
+            println!("Error sending message: {:?}", why);
         }
     }
 
@@ -325,6 +335,8 @@ pub async fn update_messages_generic(
     let file = File::open(&file_path).unwrap();
     let reader = BufReader::new(file);
 
+    let mut fmessage = String::new();
+
     let mut cur_line: usize = lines;
 
     let mut new_line: String = String::new();
@@ -353,6 +365,8 @@ pub async fn update_messages_generic(
                 || line.contains("[6nsay")
                 || line.contains("say ->")
                 || (line.contains("say ") && !line.contains(" say "))
+                || line.contains("set a new record for ")                           /* support for modded terraria, this is filtering some of the messages the mods produce */
+                || line.contains("Receiving boss records from the joined player")
                 || line.len() < 8
                 || &line == &ll
             {
@@ -361,20 +375,29 @@ pub async fn update_messages_generic(
 
             let reply: &str = &replace_formatting(line.to_string());
 
+            if reply.len() < 1 {
+                continue;
+            }
+
             // if it's not an in game command, we can generate what the discord message will be
             //
             // firstly we put the server name then the new line message, this is where replace
             // formatting comes in to remove the special mc escape sequences
-            let message = format!("[{}]{}", &server_name, reply);
+            let message = format!("[{}]{}\n", &server_name, reply);
 
             if message.contains("say `") || message.contains("say [") {
                 continue;
             }
 
-            // send the message to the chat bridge channel
-            if let Err(why) = ChannelId(chat_id).say(&ctx.http, message).await {
-                println!("Error sending message: {:?}", why);
-            }
+            fmessage.push_str(&message);
+             
+        }
+    }
+
+    if fmessage.len() > 0 {
+        // send the message to the chat bridge channel
+        if let Err(why) = ChannelId(chat_id).say(&ctx.http, fmessage).await {
+            println!("Error sending message: {:?}", why);
         }
     }
 
@@ -416,6 +439,10 @@ pub fn collect(server: String, lines: u16) -> String {
 
     result
 }
+
+// TODO
+// fix disk usage 
+// 
 
 pub async fn sys_check(dis: bool, ctx: Context, msg: Option<Message>, chat_id: u64) {
     let (mut sys, mut warn) = (System::new_all(), false);
@@ -494,7 +521,7 @@ pub async fn sys_check(dis: bool, ctx: Context, msg: Option<Message>, chat_id: u
 //
 // the function returns the index of the drive if there is one in trouble, this can help quickly sort
 // things out through df -h if needed
-fn check_disk(sys: &System) -> (f64, f64, f64) {
+pub fn check_disk(sys: &System) -> (f64, f64, f64) {
     let (mut used_biggest, mut used_total) = (0.0, 0.0);
     let (mut warn_i, mut cur_i) = (0, 0);
     let mut warn: bool = false;

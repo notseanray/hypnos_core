@@ -30,7 +30,10 @@ static mut SELF_ID: u64 = 0;
 
 struct Handler {
     is_loop_running: AtomicBool,
-    backup_time: i64,
+    backup_time: i64, 
+    backup_dir: String, 
+    backup_store: String,
+    keep_time: u64,
     prefix: String,
     chat_bridge_id: u64,
     shell_access: Vec<u64>,
@@ -137,7 +140,8 @@ impl EventHandler for Handler {
             let start: Option<usize> = msg.content.replace(|c: char| !c.is_ascii(), "").find("> =");
             if start != None {
                 if (start.unwrap() + 2) < msg.content.len() {
-                    let spliced: &str = &msg.content[(start.unwrap() + 2)..].replace(|c: char| !c.is_ascii(), "");
+                    let spliced: &str = &msg.content[(start.unwrap() + 2)..]
+                        .replace(|c: char| !c.is_ascii(), "");
                     run_calc(ctx.to_owned(), self.chat_bridge_id, spliced.to_string()).await;
                 }
             }
@@ -154,8 +158,26 @@ impl EventHandler for Handler {
         // commands
         //
         // plus I don't know how to use serenity properly
-        let cmd = &msg.content[1..].replace(|c: char| !c.is_ascii(), "");
-        match cmd.as_str() {
+
+        let msgc = msg.content.replace(|c: char| !c.is_ascii(), "");
+
+        let mut cmd = msgc.as_str();
+
+        // match just the command
+        if msgc.find(" ") != None {
+            cmd = &msg.content[1..msg.content.find(" ").unwrap()];
+        }
+
+        match cmd {
+            "backup" => backup::backup(
+                Some(ctx), 
+                Some(msg), 
+                Some(self.shell_access.to_owned()), 
+                self.keep_time, 
+                self.backup_dir.to_owned(), 
+                self.backup_store.to_owned(),
+                self.backup_time.to_owned() as u64,
+            ).await,
             "ping" => ping::ping(ctx, msg).await,
             "help" => help::help(ctx, msg).await,
             "recompile" => {
@@ -193,6 +215,8 @@ impl EventHandler for Handler {
 
         let chat_id = self.chat_bridge_id;
 
+        let keept = self.keep_time;
+
         let msg_ctx = ctx.clone();
 
         // this atomic boolean ensures that only one of each loop runs and that they run in order
@@ -215,6 +239,8 @@ impl EventHandler for Handler {
                             )
                             .await;
                         }
+
+                        // update any other sessions that must be scanned by the bot
                         for (i, e) in GENERIC_SERVERS.iter().enumerate() {
                             let (server_name, line) = update_messages_generic(
                                 e.to_owned(),
@@ -241,9 +267,22 @@ impl EventHandler for Handler {
             // skip it
             if self.backup_time > 200 {
                 let backup_cycle: i64 = self.backup_time;
+                let bdir = self.backup_dir.to_owned();
+                let bs = self.backup_store.to_owned();
+                let bt = self.backup_time.to_owned() as u64;
                 // create another async loop to run in parallel
                 tokio::spawn(async move {
                     loop {
+                        let _res = backup::backup(
+                            None, 
+                            None, 
+                            None, 
+                            keept, 
+                            bdir.to_owned(), 
+                            bs.to_owned(),
+                            bt.to_owned(),
+                        ).await;
+                        
                         tokio::time::sleep(Duration::from_secs(backup_cycle as u64)).await;
                     }
                 });
@@ -358,6 +397,9 @@ async fn main() {
         .event_handler(Handler {
             is_loop_running: AtomicBool::new(false),
             backup_time: backup,
+            backup_dir: config.optional.backup_dir.unwrap(),
+            backup_store: config.optional.backup_store.unwrap(),
+            keep_time: config.optional.keep_time.unwrap(),
             prefix: config.prefix,
             chat_bridge_id: config.optional.chat_bridge_id.unwrap(),
             shell_access: config.shell_access,

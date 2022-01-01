@@ -6,3 +6,9 @@ initial release:
 - command system layout
 - execute command
 - terraria log parsing for cross-game chat bridge capabilities
+minor update:
+- improve stability of file reading
+- *update: backup manager
+- *update: ability to make/remove/list backups from discord
+- server monitor
+- additional checks to improve stability

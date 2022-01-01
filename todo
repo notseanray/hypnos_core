@@ -1,0 +1,4 @@
+-- TODO --
+use global map to store tmux/screen state
+convert line storage to map
+convert generic or not to map with bool

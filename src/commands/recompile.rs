@@ -23,6 +23,8 @@ pub async fn recompile(ctx: Context, msg: Message, ids: Vec<u64>, build_dir: Str
     // check if the message author has correct permissions
     if ids.contains(msg.author.id.as_u64()) {
 
+        let args: Vec<&str> = msg.content.split(" ").collect();
+
         // create new tmux session to compile in with the name recompile
         Command::new("tmux")
             .args(["new", "-s", "recompile"])
@@ -49,7 +51,7 @@ pub async fn recompile(ctx: Context, msg: Message, ids: Vec<u64>, build_dir: Str
         // it
         //
         // next, copy the files into the backup directory
-        if msg.content.contains(&"backup") {
+        if args.contains(&"backup") {
             let old_build: String = format!("{}/old_src", build_dir);
             if !check_dir(old_build.to_owned(), false) {
                 println!("creating backup directory");
@@ -64,11 +66,14 @@ pub async fn recompile(ctx: Context, msg: Message, ids: Vec<u64>, build_dir: Str
         // if git is one of the options, then clone the main repo
         // TODO
         // add separate repo as optional config option
-        if msg.content.contains(&"git") {
-            Command::new("git")
+        if args.contains(&"git") {
+            let gitcmd = Command::new("git")
                 .args(["clone", "https://github.com/NotCreative21/hypnos_core.git"])
-                .output()
+                .status()
                 .expect("*error: failed to git clone in attempt to recompile");
+            if !gitcmd.success() {
+                eprintln!("*error: failed to copy new files from github")
+            }
         }
 
         let new_change_path = format!("{}/hypnos_core/changelog", build_dir);
