@@ -1,6 +1,7 @@
 use config::*;
 use std::{
-    env,
+    env, fs,
+    process::Command,
     sync::atomic::{AtomicBool, Ordering},
     time::{Duration, Instant},
 };
@@ -30,8 +31,8 @@ static mut SELF_ID: u64 = 0;
 
 struct Handler {
     is_loop_running: AtomicBool,
-    backup_time: i64, 
-    backup_dir: String, 
+    backup_time: i64,
+    backup_dir: String,
     backup_store: String,
     keep_time: u64,
     prefix: String,
@@ -40,6 +41,7 @@ struct Handler {
     build_dir: String,
     server_name: Vec<String>,
     generic_name: Vec<String>,
+    script_update: u64,
 }
 
 #[async_trait]
@@ -50,13 +52,12 @@ impl EventHandler for Handler {
     // Event handlers are dispatched through a threadpool, and so multiple
     // events can be dispatched simultaneously.
     async fn message(&self, ctx: Context, msg: Message) {
-
         // if chat bridge is defined in the config, check if the message is in the chat bridge
         // channel, if it starts with the the server we are currently operating on then skip it
         if msg.channel_id == self.chat_bridge_id {
             for i in self.server_name.clone() {
                 let server_name_format: String = format!("[{}]", i.to_owned());
-                
+
                 if !msg.content.starts_with(&server_name_format) {
                     let mut message = String::new();
                     let mut self_msg: bool = false;
@@ -66,9 +67,7 @@ impl EventHandler for Handler {
                             // generate the tellraw command
                             message = format!(
                                 "tellraw @a {{ \"text\": \"{}\" }}",
-                                &msg.content
-                                    .replace(|c: char| !c.is_ascii(), "")
-                                    .replace("\n", "")
+                                &msg.content.replace(|c: char| !c.is_ascii(), "")
                             );
                         }
                     }
@@ -77,9 +76,7 @@ impl EventHandler for Handler {
                         message = format!(
                             "tellraw @a {{ \"text\": \"[{}] {}\" }}",
                             msg.author.name,
-                            msg.content
-                                .replace(|c: char| !c.is_ascii(), "")
-                                .replace("\n", "")
+                            msg.content.replace(|c: char| !c.is_ascii(), "")
                         );
                     }
                     // send it to the correct tmux session
@@ -88,8 +85,7 @@ impl EventHandler for Handler {
             }
             for i in self.generic_name.clone() {
                 let server_name_format: String = format!("[{}]", i.to_owned());
-                if !msg.content.starts_with(&server_name_format)
-                {
+                if !msg.content.starts_with(&server_name_format) {
                     let mut message = String::new();
 
                     let mut self_msg: bool = false;
@@ -100,20 +96,13 @@ impl EventHandler for Handler {
                             self_msg = true;
 
                             // terraria command format to paste in chat
-                            message = format!(
-                                "say {}", 
-                                &msg.content
-                            );
+                            message = format!("say {}", &msg.content);
                         }
                     }
 
                     if !self_msg {
                         // generate the tellraw command
-                        message = format!(
-                            "say [{}] {}",
-                            msg.author.name,
-                            msg.content
-                        );
+                        message = format!("say [{}] {}", msg.author.name, msg.content);
                     }
 
                     // send it to the correct tmux session
@@ -121,6 +110,10 @@ impl EventHandler for Handler {
                 }
             }
         }
+
+        let msgc = msg.content.replace(|c: char| !c.is_ascii(), "");
+
+        let mut cmd = msgc.as_str();
 
         if &msg.content.len() > &2
             && &msg.content[0..1] == "="
@@ -133,23 +126,25 @@ impl EventHandler for Handler {
             )
             .await;
         }
-        if msg.content.replace(|c: char| !c.is_ascii(), "").starts_with("[")
+
+        if msg
+            .content
+            .replace(|c: char| !c.is_ascii(), "")
+            .starts_with("[")
             && msg.content.contains("> =")
             && msg.channel_id == self.chat_bridge_id
         {
-            let start: Option<usize> = msg.content.replace(|c: char| !c.is_ascii(), "").find("> =");
-            if start != None {
-                if (start.unwrap() + 2) < msg.content.len() {
-                    let spliced: &str = &msg.content[(start.unwrap() + 2)..]
-                        .replace(|c: char| !c.is_ascii(), "");
-                    run_calc(ctx.to_owned(), self.chat_bridge_id, spliced.to_string()).await;
-                }
+            let start: Option<usize> = msgc.find("> =");
+            if (start.unwrap() + 2) < msg.content.len() && start != None {
+                let spliced: &str = &msgc[(start.unwrap() + 2)..];
+                run_calc(ctx.to_owned(), self.chat_bridge_id, spliced.to_string()).await;
             }
         }
 
         // if we know that the message is not from chat bridge we can still check to see if it has
         // the bot prefix, if it doesn't then we can just skip it
-        if &msg.content.len() < &2 || &msg.content[0..1].replace(|c: char| !c.is_ascii(), "") != &self.prefix {
+        let igncmd = format!("> {}", &self.prefix);
+        if &cmd.len() < &2 || &cmd[0..1] != &self.prefix {
             return;
         }
 
@@ -158,26 +153,26 @@ impl EventHandler for Handler {
         // commands
         //
         // plus I don't know how to use serenity properly
-
-        let msgc = msg.content.replace(|c: char| !c.is_ascii(), "");
-
-        let mut cmd = msgc.as_str();
-
         // match just the command
         if msgc.find(" ") != None {
             cmd = &msg.content[1..msg.content.find(" ").unwrap()];
+        } else {
+            cmd = &msgc[1..];
         }
 
         match cmd {
-            "backup" => backup::backup(
-                Some(ctx), 
-                Some(msg), 
-                Some(self.shell_access.to_owned()), 
-                self.keep_time, 
-                self.backup_dir.to_owned(), 
-                self.backup_store.to_owned(),
-                self.backup_time.to_owned() as u64,
-            ).await,
+            "backup" => {
+                backup::backup(
+                    Some(ctx),
+                    Some(msg),
+                    Some(self.shell_access.to_owned()),
+                    self.keep_time,
+                    self.backup_dir.to_owned(),
+                    self.backup_store.to_owned(),
+                    self.backup_time.to_owned() as u64,
+                )
+                .await
+            }
             "ping" => ping::ping(ctx, msg).await,
             "help" => help::help(ctx, msg).await,
             "recompile" => {
@@ -188,13 +183,16 @@ impl EventHandler for Handler {
                     self.build_dir.to_owned(),
                 )
                 .await
-            },
+            }
             "execute" => {
                 execute::execute(ctx, msg, self.shell_access.clone()).await;
-            },
+            }
             "syscheck" => {
                 syscheck::syscheck(ctx, msg, self.chat_bridge_id).await;
-            },
+            }
+            "script" => {
+                script::script(ctx, msg, self.shell_access.clone()).await;
+            }
             _ => invalid::invalid(ctx, msg).await,
         }
     }
@@ -274,15 +272,16 @@ impl EventHandler for Handler {
                 tokio::spawn(async move {
                     loop {
                         let _res = backup::backup(
-                            None, 
-                            None, 
-                            None, 
-                            keept, 
-                            bdir.to_owned(), 
+                            None,
+                            None,
+                            None,
+                            keept,
+                            bdir.to_owned(),
                             bs.to_owned(),
                             bt.to_owned(),
-                        ).await;
-                        
+                        )
+                        .await;
+
                         tokio::time::sleep(Duration::from_secs(backup_cycle as u64)).await;
                     }
                 });
@@ -298,7 +297,55 @@ impl EventHandler for Handler {
                     tokio::time::sleep(Duration::from_secs(300)).await;
                 }
             });
-            // map thread
+
+            // script thread, this thread executes anything in the script file in the default
+            // folde
+            let stime = self.script_update;
+            tokio::spawn(async move {
+                // various checks for different directorys or files to see if they exists, if they
+                // don't then we must create them
+                if !check_dir("./default".to_string(), true) {
+                    println!("*info: default folder not found, generating it");
+                    fs::create_dir("./default")
+                        .expect("*info: failed to create new default folder");
+                }
+
+                if !check_dir("./hypnos_core.conf".to_string(), true) {
+                    println!("*warn: config file not found, copying it from default");
+                    fs::copy(
+                        "./build/hypnos_core/default/template.conf",
+                        "./hypnos_core.conf",
+                    )
+                    .expect("failed to copy default config");
+                }
+
+                if check_dir("./default/scriptrc".to_string(), true) {
+                    if !check_dir("./default/cache".to_string(), true) {
+                        println!("*info: no cache file found, creating it");
+                        fs::File::create("./default/cache")
+                            .expect("*error: failed to create cache file");
+                    }
+                    loop {
+                        if check_dir("/tmp/HypnosCore-script.lock".to_string(), true) {
+                            println!("*warn: script lock file is in place");
+                            return;
+                        }
+                        // different shells work here fine but bash is very portable and widely
+                        // used, so may as well use it here
+                        //
+                        // the 'scriptrc' file is basically a cron job or a scheduled/looped
+                        // script, this is relatively useless for most people since you can't have
+                        // it controllable per a process
+                        let _script_loop = Command::new("bash")
+                            .arg("./default/scriptrc")
+                            .status()
+                            .expect("failed to execute script command");
+                        // clear any zombies generated in the meantime
+                        reap();
+                        tokio::time::sleep(Duration::from_secs(stime)).await;
+                    }
+                }
+            });
 
             // Now that the loops are running, we can set the atomic bool to true
             self.is_loop_running.swap(true, Ordering::Relaxed);
@@ -357,7 +404,10 @@ async fn main() {
         }
 
         // wait for tmux to create the pipe file
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::time::sleep(Duration::from_millis(
+            (config.optional.server_name.len() * 20) as u64,
+        ))
+        .await;
 
         // set the line count based on how many lines there are in the file
         for i in server_name {
@@ -406,6 +456,7 @@ async fn main() {
             build_dir: config.build_dir,
             server_name: config.optional.server_name,
             generic_name: config.optional.generic_name,
+            script_update: config.optional.script_update.unwrap(),
         })
         .await
         .expect("Err creating client");

@@ -30,6 +30,7 @@ pub struct Optional {
     pub keep_time: Option<u64>,
     pub backup_store: Option<String>,
     pub ign_prefix: Option<String>,
+    pub script_update: Option<u64>,
 }
 
 /*
@@ -40,7 +41,7 @@ pub fn load_config(conf: String) -> Config {
     // check if the config exists, and warn if it's not absolute
     //
     // default path is non absolute, so ignore that warning if you don't care
-    let _ = !check_dir(conf.to_owned(), true); 
+    let _ = !check_dir(conf.to_owned(), true);
 
     /*
      * TODO

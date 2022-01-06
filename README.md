@@ -21,7 +21,7 @@ This code was made to run on my server, and I obviously cannot ensure that it wi
 
 #### installation
 
-This is not inteded for anyone else to use in it's current state
+This is not intended for anyone else to use in it's current state
 
 if you still wish to mess around with it, it is recommended you have [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html) installed
 
@@ -32,9 +32,11 @@ $ mkdir -p hypnos_core/build
 $ cd hypnos_core/build
 $ git clone git@github.com:NotCreative21/hypnos_core.git
 $ cd hypnos_core
-$ cargo build --release
+$ cargo run --release reset-cfg
 $ cp target/release/hypnos_core ../..
-$ ./hypnos_core reset-cfg
+$ cp hypnos_core.conf ../..
+$ cd ../..
+$ ./hypnos_core
 ```
 
 After these steps, the environment is setup for the recompile command to work and the hypnos_core.conf file can now be filled out.
@@ -48,11 +50,11 @@ After these steps, the environment is setup for the recompile command to work an
 * server monitor, checks server health and warns if there are issues
 * backup manager, create, delete, and list backups from discord
 * backup scheduler, create backups on intervals
+* script scheduler, run any program or script on a configurable timer
 
 #### currently under development
 * improving reliable recompiling
 * region backup system, save/load backups
-* map render scheduler
 
 #### future features
 * chest searcher per a region

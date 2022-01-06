@@ -22,7 +22,6 @@ pub async fn recompile(ctx: Context, msg: Message, ids: Vec<u64>, build_dir: Str
 
     // check if the message author has correct permissions
     if ids.contains(msg.author.id.as_u64()) {
-
         let args: Vec<&str> = msg.content.split(" ").collect();
 
         // create new tmux session to compile in with the name recompile

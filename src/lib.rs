@@ -1,5 +1,5 @@
 use std::{
-    fs::{File, copy},
+    fs::{copy, File},
     io::{BufRead, BufReader},
     path::PathBuf,
     process::Command,
@@ -10,21 +10,13 @@ use serenity::{
     prelude::*,
 };
 
-use sysinfo::{
-    DiskExt, 
-    System, 
-    SystemExt
-};
+use sysinfo::{DiskExt, System, SystemExt};
 
 use eval::eval;
 
 extern crate libc;
 
-use libc::{
-    c_int, 
-    pid_t
-};
-
+use libc::{c_int, pid_t};
 
 pub mod commands {
     pub mod backup;
@@ -33,6 +25,7 @@ pub mod commands {
     pub mod invalid;
     pub mod ping;
     pub mod recompile;
+    pub mod script;
     pub mod syscheck;
 }
 
@@ -136,7 +129,9 @@ pub async fn send_command(server_name: String, message: String) {
             "-t",
             &server_name,
             &message
-                .replace(|c: char| !c.is_ascii(), ""),
+                .replace(|c: char| !c.is_ascii(), "")
+                .replace("\\", "")
+                .replace("\n", ", "),
             "Enter",
         ])
         .spawn()
@@ -285,7 +280,7 @@ pub async fn update_messages(
             );
 
             message.push_str(&nmessage);
-       }
+        }
     }
 
     if message.len() > 0 {
@@ -390,7 +385,6 @@ pub async fn update_messages_generic(
             }
 
             fmessage.push_str(&message);
-             
         }
     }
 
@@ -428,6 +422,10 @@ pub fn collect(server: String, lines: u16) -> String {
         BufReader::new(fline).lines().count(),
     );
 
+    if lines as usize > flines {
+        return "INVALID".to_string();
+    }
+
     let mut result = String::new();
 
     for (i, line) in reader.enumerate() {
@@ -441,8 +439,8 @@ pub fn collect(server: String, lines: u16) -> String {
 }
 
 // TODO
-// fix disk usage 
-// 
+// fix disk usage
+//
 
 pub async fn sys_check(dis: bool, ctx: Context, msg: Option<Message>, chat_id: u64) {
     let (mut sys, mut warn) = (System::new_all(), false);
@@ -565,8 +563,7 @@ pub async fn run_calc(ctx: Context, chat_id: u64, expression: String) {
     let mut response: String = String::new();
     // the crate allows the use of ranges to be evaluated, however, we will just ignore them as
     // they can cause issues if large ranges are used
-    if result.is_err() 
-        || result.as_ref().ok().unwrap().to_string().contains("..") {
+    if result.is_err() || result.as_ref().ok().unwrap().to_string().contains("..") {
         response = "invalid expression".to_string();
     } else {
         if result.as_ref().ok().unwrap().to_string().len() > 200 {
@@ -579,12 +576,8 @@ pub async fn run_calc(ctx: Context, chat_id: u64, expression: String) {
     }
 }
 
-extern {
-    pub fn waitpid(
-        pid: pid_t, 
-        stat_loc: *mut c_int, 
-        options: c_int
-    ) -> pid_t;
+extern "C" {
+    pub fn waitpid(pid: pid_t, stat_loc: *mut c_int, options: c_int) -> pid_t;
 }
 
 // std::Command can leave behind zombie processes that buid up over time, this small function uses
