@@ -123,16 +123,20 @@ pub async fn gen_pipe(server_name: String, rm: bool) {
 // multiple lines you can send the command multiple times
 #[inline(always)]
 pub async fn send_command(server_name: String, message: String) {
+
+    let msg = format!(
+        "\"{}\"", 
+        &message
+            .replace(|c: char| !c.is_ascii(), "")
+            .replace("\\", ""),
+    );
+
     Command::new("tmux")
         .args([
             "send-keys",
             "-t",
             &server_name,
-            &message
-                .replace(|c: char| !c.is_ascii(), "")
-                .replace("\\", "")
-                .replace("\n", ", "),
-            "Enter",
+            &msg,        "Enter",
         ])
         .spawn()
         .expect("*error: failed to send to tmux session");
@@ -483,7 +487,7 @@ pub async fn sys_check(dis: bool, ctx: Context, msg: Option<Message>, chat_id: u
         response.push_str(&avg);
     }
 
-    if (sys.used_memory() as f64 / sys.total_memory() as f64) > 0.8 {
+    if (sys.used_memory() as f64 / sys.total_memory() as f64) > 0.9 {
         response.push_str(&"high ram usage detected!\n");
         warn = true;
     }
@@ -537,7 +541,7 @@ pub fn check_disk(sys: &System) -> (f64, f64, f64) {
             used_biggest = disk.available_space() as f64;
         }
 
-        if ((used_total - used_biggest) / disk.total_space() as f64) > 0.8 {
+        if ((used_total - used_biggest) / disk.total_space() as f64) > 0.9 {
             warn = true;
             warn_i = cur_i;
             println!("*warn: drive space low on drive index: {}", warn_i);

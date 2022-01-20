@@ -11,7 +11,7 @@ pub async fn script(ctx: Context, msg: Message, ids: Vec<u64>) {
                     .channel_id
                     .say(
                         ctx.to_owned().http,
-                        "script lock file does not exists! Skipping futher steps".to_string(),
+                        "script lock file does not exist! Skipping futher steps".to_string(),
                     )
                     .await
                 {
@@ -39,7 +39,7 @@ pub async fn script(ctx: Context, msg: Message, ids: Vec<u64>) {
                     .channel_id
                     .say(
                         ctx.to_owned().http,
-                        "script lock file already exists! Skipping futher steps".to_string(),
+                        "script lock file already exist! Skipping futher steps".to_string(),
                     )
                     .await
                 {

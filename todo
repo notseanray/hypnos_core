@@ -2,3 +2,10 @@
 use global map to store tmux/screen state
 convert line storage to map
 convert generic or not to map with bool
+
+last 2 letters of session name is game type, match parsepattern.rs with the last name
+vec with bool to store screen or tmux
+check tmux if it's running something
+push to cache, return string from parse functions
+send one multi line message from different servers
+reload server vec from discord

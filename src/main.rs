@@ -301,51 +301,53 @@ impl EventHandler for Handler {
             // script thread, this thread executes anything in the script file in the default
             // folde
             let stime = self.script_update;
-            tokio::spawn(async move {
-                // various checks for different directorys or files to see if they exists, if they
-                // don't then we must create them
-                if !check_dir("./default".to_string(), true) {
-                    println!("*info: default folder not found, generating it");
-                    fs::create_dir("./default")
-                        .expect("*info: failed to create new default folder");
-                }
-
-                if !check_dir("./hypnos_core.conf".to_string(), true) {
-                    println!("*warn: config file not found, copying it from default");
-                    fs::copy(
-                        "./build/hypnos_core/default/template.conf",
-                        "./hypnos_core.conf",
-                    )
-                    .expect("failed to copy default config");
-                }
-
-                if check_dir("./default/scriptrc".to_string(), true) {
-                    if !check_dir("./default/cache".to_string(), true) {
-                        println!("*info: no cache file found, creating it");
-                        fs::File::create("./default/cache")
-                            .expect("*error: failed to create cache file");
+            if stime > 60 {
+                tokio::spawn(async move {
+                    // various checks for different directorys or files to see if they exists, if they
+                    // don't then we must create them
+                    if !check_dir("./default".to_string(), true) {
+                        println!("*info: default folder not found, generating it");
+                        fs::create_dir("./default")
+                            .expect("*info: failed to create new default folder");
                     }
-                    loop {
-                        if check_dir("/tmp/HypnosCore-script.lock".to_string(), true) {
-                            println!("*warn: script lock file is in place");
-                            return;
+
+                    if !check_dir("./hypnos_core.conf".to_string(), true) {
+                        println!("*warn: config file not found, copying it from default");
+                        fs::copy(
+                            "./build/hypnos_core/default/template.conf",
+                            "./hypnos_core.conf",
+                        )
+                        .expect("failed to copy default config");
+                    }
+
+                    if check_dir("./default/scriptrc".to_string(), true) {
+                        if !check_dir("./default/cache".to_string(), true) {
+                            println!("*info: no cache file found, creating it");
+                            fs::File::create("./default/cache")
+                                .expect("*error: failed to create cache file");
                         }
-                        // different shells work here fine but bash is very portable and widely
-                        // used, so may as well use it here
-                        //
-                        // the 'scriptrc' file is basically a cron job or a scheduled/looped
-                        // script, this is relatively useless for most people since you can't have
-                        // it controllable per a process
-                        let _script_loop = Command::new("bash")
-                            .arg("./default/scriptrc")
-                            .status()
-                            .expect("failed to execute script command");
-                        // clear any zombies generated in the meantime
-                        reap();
-                        tokio::time::sleep(Duration::from_secs(stime)).await;
+                        loop {
+                            if check_dir("/tmp/HypnosCore-script.lock".to_string(), true) {
+                                println!("*warn: script lock file is in place");
+                                return;
+                            }
+                            // different shells work here fine but bash is very portable and widely
+                            // used, so may as well use it here
+                            //
+                            // the 'scriptrc' file is basically a cron job or a scheduled/looped
+                            // script, this is relatively useless for most people since you can't have
+                            // it controllable per a process
+                            let _script_loop = Command::new("bash")
+                                .arg("./default/scriptrc")
+                                .status()
+                                .expect("failed to execute script command");
+                            // clear any zombies generated in the meantime
+                            reap();
+                            tokio::time::sleep(Duration::from_secs(stime)).await;
+                        }
                     }
-                }
-            });
+                });
+            }
 
             // Now that the loops are running, we can set the atomic bool to true
             self.is_loop_running.swap(true, Ordering::Relaxed);
