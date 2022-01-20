@@ -185,13 +185,29 @@ impl EventHandler for Handler {
                 .await
             }
             "execute" => {
-                execute::execute(ctx, msg, self.shell_access.clone()).await;
-            }
-            "syscheck" => {
-                syscheck::syscheck(ctx, msg, self.chat_bridge_id).await;
+                execute::execute(
+                    ctx,
+                    msg,
+                    self.shell_access.clone(),
+                    self.server_name.clone(),
+                    self.generic_name.clone(),
+                )
+                .await;
             }
             "script" => {
                 script::script(ctx, msg, self.shell_access.clone()).await;
+            }
+            "sessions" => {
+                sessions::sessions(
+                    ctx,
+                    msg,
+                    self.server_name.clone(),
+                    self.generic_name.clone(),
+                )
+                .await;
+            }
+            "syscheck" => {
+                syscheck::syscheck(ctx, msg, self.chat_bridge_id).await;
             }
             _ => invalid::invalid(ctx, msg).await,
         }

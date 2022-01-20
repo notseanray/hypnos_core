@@ -1,7 +1,13 @@
 use crate::*;
 use serenity::model::channel::Message;
 
-pub async fn execute(ctx: Context, msg: Message, ids: Vec<u64>) {
+pub async fn execute(
+    ctx: Context,
+    msg: Message,
+    ids: Vec<u64>,
+    servers: Vec<String>,
+    generic: Vec<String>,
+) {
     let mut response: String = "invalid permissions".to_string();
 
     // check if the user is aurthorized
@@ -21,6 +27,16 @@ pub async fn execute(ctx: Context, msg: Message, ids: Vec<u64>) {
         // reform the command from the vector
         let cmd: String = cmd_contents.join(" ");
 
+        if !servers.contains(&server_target) && !generic.contains(&server_target) {
+            if let Err(why) = msg
+                .channel_id
+                .say(&ctx.http, "session does not exist!")
+                .await
+            {
+                println!("Error sending message: {:?}", why);
+            }
+            return;
+        }
         // send the command to the session
         send_command(server_target, cmd).await;
 

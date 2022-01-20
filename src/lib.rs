@@ -26,6 +26,7 @@ pub mod commands {
     pub mod ping;
     pub mod recompile;
     pub mod script;
+    pub mod sessions;
     pub mod syscheck;
 }
 
@@ -123,21 +124,15 @@ pub async fn gen_pipe(server_name: String, rm: bool) {
 // multiple lines you can send the command multiple times
 #[inline(always)]
 pub async fn send_command(server_name: String, message: String) {
-
     let msg = format!(
-        "\"{}\"", 
+        "\"{}\"",
         &message
             .replace(|c: char| !c.is_ascii(), "")
             .replace("\\", ""),
     );
 
     Command::new("tmux")
-        .args([
-            "send-keys",
-            "-t",
-            &server_name,
-            &msg,        "Enter",
-        ])
+        .args(["send-keys", "-t", &server_name, &msg, "Enter"])
         .spawn()
         .expect("*error: failed to send to tmux session");
 
